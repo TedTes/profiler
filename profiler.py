@@ -8,7 +8,6 @@ print(f"Time taken: {end - start: . 6f} seconds")
 
 stats = {}
 
-stats = {}
 
 def profile(func):
     def wrapper(*args, **kwargs):

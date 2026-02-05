@@ -73,18 +73,42 @@ def analyze_samples():
             func_count[func] = func_count.get(func, 0) + 1
     return func_count
 
-start_sampling()
-for _ in range(10):
-    slow_function()
-stop_sampling()
+def build_call_tree():
+    tree = {}
+    for stack in samples:
+        current = tree
+        for func in stack:
+            current = current.setdefault(func, {'count':0, 'children':{}})
+            current['count']+=1
+    return tree
 
-hotspots = analyze_samples()
-for func, count in sorted(hotspots.items(), key= lambda x: x[1], reverse=True)[:5]:
-    print(f"{func}: {count} times")
+def print_tree(tree, indent=0, threshold=5):
+    for func, data in sorted(tree.items(), key=lambda x:x[1]['count'], reverse=True):
+        if data['count'] >= threshold:
+            print("  " * indent + f"{func} ({data['count']})")   
+            print_tree(data['children'], indent+1, threshold)
 
+def flamegraph():
+    print("\nFlamegraph (wider = more time):")
+    hotspots = analyze_samples()
+    max_count = max(hotspots.values()) if hotspots else 1
+    for func, count in sorted(hotspots.items(), key=lambda x: x[1], reverse=True)[:10]:
+        name = func.split(':')[1] if ':' in func else func
+        bar = "█" * int(50 * count / max_count)
+        print(f"{name[:30]:30} {bar} {count}")
+
+# Replace the test code at bottom
+print("=== DECORATOR PROFILING ===")
 for _ in range(5):
     slow_function()
     fast_function()
-
-show_calls()
 report()
+show_calls()
+
+print("\n=== SAMPLING PROFILER ===")
+samples.clear()
+start_sampling(0.001)
+for _ in range(50):
+    slow_function()
+stop_sampling()
+flamegraph()

@@ -1,9 +1,13 @@
 import time
 import threading
 import traceback
-
-
+from collections import defaultdict
 import sys
+import linecache
+
+line_stats = defaultdict(lambda: {'count': 0, 'time': 0.0})
+current_line_start = None
+
 
 call_stack = []
 sampling_active = False
@@ -97,6 +101,52 @@ def flamegraph():
         bar = "█" * int(50 * count / max_count)
         print(f"{name[:30]:30} {bar} {count}")
 
+
+
+def trace_lines(frame, event, arg):
+    global current_line_start
+    if event == 'line':
+        if current_line_start:
+            duration = time.perf_counter() - current_line_start
+            key = (frame.f_code.co_filename, frame.f_lineno)
+            line_stats[key]['count'] += 1
+            line_stats[key]['time'] += duration
+        current_line_start = time.perf_counter()
+    return trace_lines
+
+def line_profile(func):
+    def wrapper(*args, **kwargs):
+        sys.settrace(trace_lines)
+        result = func(*args, **kwargs)
+        sys.settrace(None)
+        return result
+    return wrapper
+def show_line_stats(filename):
+    print(f"\nLine-by-line profile for {filename}:")
+    for (fname, lineno), data in sorted(line_stats.items()):
+        if filename in fname:
+            print(f"Line {lineno} :{data['count']} hits , {data['time']:.6f}s total")
+
+
+@line_profile
+def process_data():
+    data = list(range(1000000))
+    filtered = [x for x in data if x % 2 == 0 ]
+    total = sum(filtered)
+    return total
+
+
+
+def show_line_stats_pretty(filename):
+    print(f"\nLine-by-line profile:")
+    for (fname, lineno), data in sorted(line_stats.items(), key=lambda x: x[1]['time'], reverse=True):
+        if filename in fname:
+            code = linecache.getline(fname, lineno).strip()
+            print(f"Line {lineno:3d} | {data['time']:8.4f}s | {code[:60]}")
+result = process_data()
+print(f"\nTotal entries collected: {len(line_stats)}")
+print(f"First few entries: {list(line_stats.items())[:3]}")
+show_line_stats_pretty('profiler.py')
 # Replace the test code at bottom
 print("=== DECORATOR PROFILING ===")
 for _ in range(5):
